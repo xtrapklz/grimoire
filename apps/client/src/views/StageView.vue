@@ -966,9 +966,10 @@ const ready = computed(() => state.readiness);
 }
 .selfie {
   /* Inset like the role/emoji icons, so the token's own circular border shows
-     around the edge instead of the photo covering it edge-to-edge. */
-  width: 85%;
-  height: 85%;
+     around the edge instead of the photo covering it edge-to-edge. 85% left
+     too much border showing; split the difference back toward full-bleed. */
+  width: 92.5%;
+  height: 92.5%;
   object-fit: cover;
   border-radius: 50%;
 }

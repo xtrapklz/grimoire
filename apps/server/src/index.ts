@@ -1,10 +1,11 @@
 import { createServer } from "node:http";
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir, networkInterfaces } from "node:os";
 import { fileURLToPath } from "node:url";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { RandomBot, Rng } from "@grimoire/engine";
 import express from "express";
+import multer from "multer";
 import { Server } from "socket.io";
 import { Room } from "./room.js";
 
@@ -130,6 +131,83 @@ function lanAddresses(): string[] {
 
 app.use("/user-assets", express.static(userAssets));
 app.get("/api/audio", (_req, res) => res.json(audioManifest()));
+
+// ── Audio library management ────────────────────────────────────────────────
+// Lets the admin panel add/remove music & SFX through the browser instead of
+// needing filesystem/SSH access — the only practical way to manage audio on a
+// server that isn't running on your own machine (Render, etc). On a host with
+// ephemeral storage this doesn't survive a redeploy; it's still the right
+// tool for "add a track before tonight's game" without touching git.
+// No auth beyond "you found the /dev/CODE URL" — matches the rest of the
+// app's security posture (a private link, not a public multi-tenant service).
+
+function validFolder(category: string, folder: string): boolean {
+  if (category === "music") return MUSIC_FOLDERS.includes(folder);
+  if (category === "sfx") return SFX_FOLDERS.includes(folder);
+  return false;
+}
+
+interface UploadRequest extends Express.Request {
+  _grimoireDestDir?: string;
+}
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, _file, cb) => {
+      const category = String(req.body.category ?? "");
+      const folder = String(req.body.folder ?? "");
+      if (!validFolder(category, folder)) {
+        cb(new Error("Unknown category/folder"), "");
+        return;
+      }
+      const dir = join(userAssets, category, folder);
+      mkdirSync(dir, { recursive: true });
+      (req as UploadRequest)._grimoireDestDir = dir;
+      cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+      // Strip any path components and disambiguate collisions — never trust
+      // the client-supplied name as a full path.
+      const safeName = basename(file.originalname).replace(/[/\\]/g, "_");
+      const dest = (req as UploadRequest)._grimoireDestDir ?? "";
+      let finalName = safeName;
+      let n = 1;
+      while (dest && existsSync(join(dest, finalName))) {
+        const dot = safeName.lastIndexOf(".");
+        finalName = dot > 0 ? `${safeName.slice(0, dot)} (${n})${safeName.slice(dot)}` : `${safeName} (${n})`;
+        n++;
+      }
+      cb(null, finalName);
+    },
+  }),
+  limits: { fileSize: 25 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => cb(null, AUDIO_EXTENSIONS.test(file.originalname)),
+});
+
+app.post("/api/audio/upload", upload.single("file"), (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ ok: false, error: "No audio file (or an unsupported format) was received." });
+    return;
+  }
+  res.json({ ok: true, manifest: audioManifest() });
+});
+
+app.delete("/api/audio/file", express.json(), (req, res) => {
+  const { category, folder, filename } = req.body ?? {};
+  if (!validFolder(category, folder) || typeof filename !== "string") {
+    res.status(400).json({ ok: false, error: "Invalid request" });
+    return;
+  }
+  const dir = join(userAssets, category, folder);
+  const target = join(dir, basename(filename));
+  // Belt and suspenders: the resolved path must still be inside dir.
+  if (!target.startsWith(dir + "/") || !existsSync(target)) {
+    res.status(404).json({ ok: false, error: "File not found" });
+    return;
+  }
+  unlinkSync(target);
+  res.json({ ok: true, manifest: audioManifest() });
+});
 // The stage uses this to build a join URL/QR that phones can actually reach —
 // location.origin is wrong whenever the host opened the page via localhost.
 app.get("/api/host-info", (_req, res) => {
@@ -213,6 +291,11 @@ io.on("connection", (socket) => {
   socket.on("startGame", (cb) => {
     if (!room || !room.isStageOrDev(socket.id)) return cb({ ok: false, error: "Not the host" });
     cb(room.start());
+  });
+
+  socket.on("resetGame", (cb) => {
+    if (!room || !room.isStageOrDev(socket.id)) return cb({ ok: false, error: "Not the host" });
+    cb(room.resetGame());
   });
 
   socket.on("action", (args, cb) => {

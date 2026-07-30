@@ -38,6 +38,9 @@ const PATHS: Record<string, string> = {
   lock: `<rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>`,
   retake: `<path d="M3 4v6h6"/><path d="M4.5 15a8 8 0 1 0 1.7-8.7L3 10"/>`,
   offline: `<line x1="2" y1="2" x2="22" y2="22"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M5 13a9.5 9.5 0 0 1 3.5-2.3"/><path d="M15.5 10.7A9.5 9.5 0 0 1 19 13"/><path d="M2 8.5a13.5 13.5 0 0 1 4.5-2.9"/><path d="M17.5 5.6A13.5 13.5 0 0 1 22 8.5"/><circle cx="12" cy="19.5" r="1" fill="currentColor" stroke="none"/>`,
+  stop: `<rect x="5" y="5" width="14" height="14" rx="2"/>`,
+  upload: `<path d="M12 16V4"/><polyline points="6.5 9.5 12 4 17.5 9.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>`,
+  trash: `<polyline points="4 6.5 20 6.5"/><path d="M9 6.5V4.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6.5 6.5 7.3 19a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12.5"/><line x1="10" y1="10.5" x2="10" y2="16.5"/><line x1="14" y1="10.5" x2="14" y2="16.5"/>`,
 };
 
 const inner = computed(() => PATHS[props.name] ?? "");

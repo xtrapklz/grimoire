@@ -193,6 +193,48 @@ export class Room {
     this.watchdog = null;
   }
 
+  /**
+   * Ends the current game (or does nothing if none is running) and returns
+   * the room to a fresh lobby. Bot-filled seats are dropped — they weren't
+   * real people — but human seats are kept so nobody has to rescan the QR
+   * code to play again. Every connected client is pushed the reset lobby
+   * immediately, and every timer this room owns is torn down so nothing
+   * keeps firing into a game that no longer exists.
+   */
+  resetGame(): { ok: true } | { ok: false; error: string } {
+    if (!this.game) return { ok: false, error: "No game in progress" };
+
+    for (const t of this.pendingTimeouts) clearTimeout(t);
+    this.pendingTimeouts.clear();
+    if (this.watchdog) clearInterval(this.watchdog);
+    this.watchdog = null;
+
+    this.scheduledKeys.clear();
+    this.timersByKey.clear();
+    this.duskDeadlines.clear();
+    this.dayStartedAt.clear();
+    this.duskStartedAt.clear();
+    this.dayDeadlines.clear();
+    this.duskGraced.clear();
+    this.readySeats.clear();
+    this.readyKey = "";
+    this.publicLog = [];
+    this.game = null;
+
+    this.seats = this.seats.filter((s) => !s.isBot);
+
+    this.setTimer(null);
+    this.io.to(this.channel()).emit("state", null);
+    this.io.to(this.channel()).emit("grimoire", null);
+    this.io.to(this.channel()).emit("log", this.publicLog);
+    this.pushReadiness();
+    for (const s of this.seats) {
+      if (s.socketId) this.io.to(s.socketId).emit("seat", null);
+    }
+    this.pushLobby();
+    return { ok: true };
+  }
+
   seatOfSocket(socketId: string): number {
     return this.seats.findIndex((s) => s.socketId === socketId);
   }

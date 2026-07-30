@@ -27,7 +27,104 @@ function attach() {
 onMounted(() => {
   attach();
   onReconnect(attach);
+  void refreshAudioManifest();
 });
+
+// ── Stop / reset the current game ───────────────────────────────────────────
+// Click-then-confirm rather than a native confirm() dialog — clear enough to
+// prevent a stray tap from ending a game, without a jarring modal popup.
+const resetConfirming = ref(false);
+let resetConfirmTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function resetGame() {
+  if (!resetConfirming.value) {
+    resetConfirming.value = true;
+    resetConfirmTimeout = setTimeout(() => (resetConfirming.value = false), 4000);
+    return;
+  }
+  if (resetConfirmTimeout) clearTimeout(resetConfirmTimeout);
+  resetConfirming.value = false;
+  getSocket().emit("resetGame", (resp: { ok: boolean; error?: string }) => {
+    if (!resp.ok) state.lastError = resp.error ?? "Could not reset the game";
+  });
+}
+
+// ── Audio library: add/remove music & SFX through the browser ──────────────
+// Folder lists are derived from the manifest itself (not hardcoded here), so
+// this never drifts out of sync with what the server actually recognizes.
+
+interface AudioManifest {
+  music: Record<string, string[]>;
+  sfx: Record<string, string[]>;
+}
+
+const audioManifest = ref<AudioManifest>({ music: {}, sfx: {} });
+const audioCategory = ref<"music" | "sfx">("music");
+const audioFolder = ref("");
+const audioUploading = ref(false);
+const audioError = ref("");
+const audioFileInput = ref<HTMLInputElement | null>(null);
+
+const audioFolders = computed(() => Object.keys(audioManifest.value[audioCategory.value] ?? {}));
+const audioFiles = computed(() => audioManifest.value[audioCategory.value]?.[audioFolder.value] ?? []);
+
+async function refreshAudioManifest() {
+  try {
+    const resp = await fetch("/api/audio");
+    if (resp.ok) audioManifest.value = await resp.json();
+  } catch {
+    // audio library just won't show — the game itself doesn't depend on it
+  }
+  if (!audioFolders.value.includes(audioFolder.value)) {
+    audioFolder.value = audioFolders.value[0] ?? "";
+  }
+}
+
+function onAudioCategoryChange() {
+  audioFolder.value = audioFolders.value[0] ?? "";
+}
+
+async function uploadAudio(ev: Event) {
+  const file = (ev.target as HTMLInputElement).files?.[0];
+  if (!file || !audioFolder.value) return;
+  audioUploading.value = true;
+  audioError.value = "";
+  try {
+    const form = new FormData();
+    form.append("category", audioCategory.value);
+    form.append("folder", audioFolder.value);
+    form.append("file", file);
+    const resp = await fetch("/api/audio/upload", { method: "POST", body: form });
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) audioError.value = data.error ?? "Upload failed";
+    else audioManifest.value = data.manifest;
+  } catch {
+    audioError.value = "Upload failed — check your connection.";
+  } finally {
+    audioUploading.value = false;
+    if (audioFileInput.value) audioFileInput.value.value = "";
+  }
+}
+
+function fileNameFromUrl(url: string): string {
+  return decodeURIComponent(url.split("/").pop() ?? url);
+}
+
+async function deleteAudio(url: string) {
+  const filename = fileNameFromUrl(url);
+  try {
+    const resp = await fetch("/api/audio/file", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category: audioCategory.value, folder: audioFolder.value, filename }),
+    });
+    const data = await resp.json();
+    if (resp.ok && data.ok) audioManifest.value = data.manifest;
+    else audioError.value = data.error ?? "Could not delete file";
+  } catch {
+    audioError.value = "Could not delete file — check your connection.";
+  }
+}
 
 const grim = computed(() => state.grimoire);
 const pub = computed(() => state.pub);
@@ -85,6 +182,10 @@ function statusIcons(statuses: Array<{ type: string }>): string[] {
           <span class="phase">{{ grim?.phase }} · N{{ grim?.night }} D{{ grim?.day }}</span>
           <button v-if="pub.phase === 'day'" @click="getSocket().emit('advancePhase')">→ nominations</button>
           <button v-if="pub.phase === 'nominations'" @click="getSocket().emit('advancePhase')">→ close day</button>
+          <button class="danger" :class="{ arming: resetConfirming }" @click="resetGame">
+            <Icon name="stop" :size="14" />
+            {{ resetConfirming ? "Click again to confirm" : "Stop / reset game" }}
+          </button>
         </template>
       </div>
     </header>
@@ -165,6 +266,45 @@ function statusIcons(statuses: Array<{ type: string }>): string[] {
       bots fill remaining seats on start.
     </div>
 
+    <details class="panel audiolib">
+      <summary><Icon name="speaker" :size="15" /> Audio library</summary>
+      <p class="hint">
+        Add or remove music and sound effects here — works whether this server
+        is running locally or hosted (e.g. Render). On a host with ephemeral
+        storage, files added this way won't survive a redeploy; see
+        docs/audio-guide.md for a permanent option.
+      </p>
+      <div class="audiorow">
+        <select v-model="audioCategory" @change="onAudioCategoryChange">
+          <option value="music">Music</option>
+          <option value="sfx">Sound effect</option>
+        </select>
+        <select v-model="audioFolder">
+          <option v-for="f in audioFolders" :key="f" :value="f">{{ f }}</option>
+        </select>
+        <button :disabled="!audioFolder || audioUploading" @click="audioFileInput?.click()">
+          <Icon name="upload" :size="14" /> {{ audioUploading ? "Uploading…" : "Add file" }}
+        </button>
+        <input
+          ref="audioFileInput"
+          type="file"
+          accept="audio/*"
+          style="display: none"
+          @change="uploadAudio"
+        />
+      </div>
+      <p v-if="audioError" class="audioerror">{{ audioError }}</p>
+      <ul class="audiofiles">
+        <li v-for="f in audioFiles" :key="f">
+          <span>{{ fileNameFromUrl(f) }}</span>
+          <button class="iconbtn" title="delete" @click="deleteAudio(f)">
+            <Icon name="trash" :size="14" />
+          </button>
+        </li>
+        <li v-if="audioFiles.length === 0" class="hint">No files in this folder yet.</li>
+      </ul>
+    </details>
+
     <footer v-if="state.lastError" class="errorbar" @click="state.lastError = ''">
       {{ state.lastError }}
     </footer>
@@ -229,5 +369,83 @@ function statusIcons(statuses: Array<{ type: string }>): string[] {
   text-align: center;
   padding: 0.4rem;
   cursor: pointer;
+}
+.danger {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-color: var(--blood);
+  color: #ffb3b3;
+}
+.danger.arming {
+  background: var(--blood);
+  color: #fff;
+}
+.audiolib {
+  margin: 1rem;
+}
+.audiolib summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--gold);
+  font-family: "PiratesBay", fantasy;
+}
+.hint {
+  font-size: 0.78rem;
+  opacity: 0.7;
+  margin: 0.5rem 0;
+}
+.audiorow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 0.5rem 0;
+}
+.audiorow select {
+  font: inherit;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--parchment);
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  padding: 0.4em 0.6em;
+}
+.audiorow button {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.audioerror {
+  color: #ff9c9c;
+  font-size: 0.82rem;
+  margin: 0.4rem 0;
+}
+.audiofiles {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+.audiofiles li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.3rem 0.5rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+.iconbtn {
+  padding: 0.25em 0.5em;
+  border-color: transparent;
+  background: transparent;
+}
+.iconbtn:hover {
+  border-color: var(--blood);
+  color: #ff9c9c;
 }
 </style>

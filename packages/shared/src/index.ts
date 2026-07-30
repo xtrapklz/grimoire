@@ -95,6 +95,11 @@ export interface ClientToServer {
   /** Stage (or dev) starts the game. */
   startGame: (cb: (resp: { ok: true } | { ok: false; error: string }) => void) => void;
   /**
+   * Ends the current game and returns to a fresh lobby. Bot-filled seats are
+   * dropped; human seats are kept so nobody has to rejoin to play again.
+   */
+  resetGame: (cb: (resp: { ok: true } | { ok: false; error: string }) => void) => void;
+  /**
    * Host adjusts pacing (day/dusk length, vote window, night timeout, …).
    * Values are clamped server-side. Applied immediately: if the room is
    * mid-day or mid-dusk, the countdown is recomputed from the phase's start
