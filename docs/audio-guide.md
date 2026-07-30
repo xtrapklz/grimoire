@@ -1,9 +1,9 @@
 # Audio Guide — what to source and where to put it
 
-All audio lives in `user-assets/` (created automatically when the server first
-runs, never committed to git). Drop files in, refresh the stage page, and
-they're live — **anything missing is simply silent**, so you can add audio
-piecemeal. Formats: mp3, ogg, wav, m4a, aac, or flac.
+All audio lives in a folder shaped like this (created automatically the first
+time the server runs). Drop files in, refresh the stage page, and they're
+live — **anything missing is simply silent**, so you can add audio piecemeal.
+Formats: mp3, ogg, wav, m4a, aac, or flac.
 
 ```
 user-assets/
@@ -14,6 +14,34 @@ user-assets/
   sfx/
     <event-name>/   # one FOLDER per game event — drop any number of files in
 ```
+
+## Using your own library folder instead
+
+By default that folder is `user-assets/` inside the project (gitignored, so
+it's never committed). If you'd rather keep your actual music library
+somewhere else on disk — so it isn't tied to this specific git checkout, and
+survives re-cloning or redeploying — point the server at it instead:
+
+- **Double-clicking `Start Grimoire.command`**: the first time you run it,
+  it'll ask "Where's your music & sound effects folder?" — type a path (e.g.
+  `~/Music/GrimoireAudio`) or leave it blank to keep using the bundled
+  `user-assets/`. It's remembered after that; delete the
+  `.grimoire-assets-path` file in the project and run again to change it.
+- **Running from the terminal directly**: set `GRIMOIRE_ASSETS_DIR`, e.g.
+  `GRIMOIRE_ASSETS_DIR=~/Music/GrimoireAudio npm run party`.
+
+Either way, the folder you point at still needs this app's own structure
+inside it — the server creates the `music/general`, `music/dusk`,
+`music/night`, and every `sfx/<event-name>` subfolder automatically on first
+run if they're missing, so pointing at a brand-new empty folder works fine:
+just drop your files into the subfolders it creates.
+
+**This only works for a server running on your own machine.** A cloud host
+(Render, etc.) has no way to reach a folder that lives on your computer —
+for that, either commit `user-assets/` to the repo so it deploys with the
+app, or run Grimoire locally and use a tunnel (ngrok / Cloudflare Tunnel) so
+your local server — audio library and all — is reachable from the internet
+without deploying anywhere.
 
 ## Music
 

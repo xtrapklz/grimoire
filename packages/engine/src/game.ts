@@ -700,6 +700,12 @@ export class Game {
     return { rng: this.rng, night: this.night, players: this.players, inPlay: this.inPlay };
   }
 
+  /**
+   * A frozen snapshot for the Spy's night info. Must copy `statuses` — the
+   * live array is later mutated in place (addStatus pushes onto it), so a
+   * bare reference here would let a Spy's info from three nights ago silently
+   * grow new statuses it never actually saw.
+   */
   grimoireView(): GrimoireView {
     return {
       players: this.players.map((p) => ({
@@ -707,7 +713,7 @@ export class Game {
         name: p.name,
         characterId: p.characterId,
         alive: p.alive,
-        statuses: p.statuses,
+        statuses: p.statuses.map((s) => ({ ...s })),
       })),
     };
   }

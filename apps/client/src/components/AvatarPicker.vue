@@ -21,6 +21,10 @@ const EMOJI = [
 const fileInput = ref<HTMLInputElement | null>(null);
 const videoEl = ref<HTMLVideoElement | null>(null);
 const cameraOpen = ref(false);
+// The just-captured/selected photo, held for review before it becomes your
+// avatar — so you can see exactly what everyone else will see and retake it
+// if you blinked, rather than it silently becoming final the instant you tap.
+const reviewImage = ref<string | null>(null);
 let stream: MediaStream | null = null;
 
 function pickEmoji(e: string) {
@@ -29,6 +33,7 @@ function pickEmoji(e: string) {
 }
 
 async function openCamera() {
+  reviewImage.value = null;
   if (navigator.mediaDevices?.getUserMedia) {
     try {
       stream = await navigator.mediaDevices.getUserMedia({
@@ -83,8 +88,7 @@ function snap() {
   // Mirrored, matching the preview — a selfie should look like the mirror did.
   const data = cropToAvatar(v, v.videoWidth, v.videoHeight, true);
   closeCamera();
-  setAvatar(data);
-  emit("chosen", data);
+  reviewImage.value = data;
 }
 
 async function onFile(ev: Event) {
@@ -98,13 +102,27 @@ async function onFile(ev: Event) {
       img.onerror = reject;
       img.src = url;
     });
-    const data = cropToAvatar(img, img.width, img.height, false);
-    setAvatar(data);
-    emit("chosen", data);
+    reviewImage.value = cropToAvatar(img, img.width, img.height, false);
   } finally {
     URL.revokeObjectURL(url);
     if (fileInput.value) fileInput.value.value = "";
   }
+}
+
+function usePhoto() {
+  if (!reviewImage.value) return;
+  setAvatar(reviewImage.value);
+  emit("chosen", reviewImage.value);
+  reviewImage.value = null;
+}
+
+function retake() {
+  reviewImage.value = null;
+  openCamera();
+}
+
+function cancelReview() {
+  reviewImage.value = null;
 }
 </script>
 
@@ -135,6 +153,19 @@ async function onFile(ev: Event) {
             <Icon name="camera" :size="24" /> Snap
           </button>
           <button @click="closeCamera">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Review before it becomes your avatar -->
+    <div v-if="reviewImage" class="camera-modal" @click.self="cancelReview">
+      <div class="camera-frame">
+        <img :src="reviewImage" class="preview reviewimg" alt="your photo" />
+        <div class="camera-controls">
+          <button class="primary snap" @click="usePhoto">
+            <Icon name="check" :size="20" /> Use this photo
+          </button>
+          <button @click="retake"><Icon name="retake" :size="18" /> Retake</button>
         </div>
       </div>
     </div>
@@ -194,6 +225,10 @@ async function onFile(ev: Event) {
   border: 3px solid var(--gold);
   transform: scaleX(-1); /* mirror like a mirror */
   background: #000;
+}
+.reviewimg {
+  /* Already correctly oriented (baked into the cropped image) — don't mirror again. */
+  transform: none;
 }
 .camera-controls {
   display: flex;

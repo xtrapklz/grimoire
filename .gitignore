@@ -6,3 +6,4 @@ coverage/
 vendor/
 user-assets/
 .env
+.grimoire-assets-path

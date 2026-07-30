@@ -115,6 +115,7 @@ export class Room {
     if (this.game) this.pushAll();
     this.io.to(socket.id).emit("timer", this.phaseTimer);
     this.io.to(socket.id).emit("log", this.publicLog);
+    this.pushReadiness();
   }
 
   attachDev(socket: Socket): void {
@@ -124,6 +125,7 @@ export class Room {
     if (this.game) this.pushAll();
     this.io.to(socket.id).emit("timer", this.phaseTimer);
     this.io.to(socket.id).emit("log", this.publicLog);
+    this.pushReadiness();
   }
 
   join(socket: Socket, name: string, sessionKey: string): { ok: true; seat: number } | { ok: false; error: string } {
@@ -141,6 +143,7 @@ export class Room {
       }
       this.io.to(socket.id).emit("timer", this.phaseTimer);
       this.io.to(socket.id).emit("log", this.publicLog);
+      this.pushReadiness();
       return { ok: true, seat: existing };
     }
     if (this.game) return { ok: false, error: "Game already in progress" };

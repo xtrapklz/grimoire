@@ -1,8 +1,8 @@
 import { createServer } from "node:http";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
-import { networkInterfaces } from "node:os";
+import { homedir, networkInterfaces } from "node:os";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { RandomBot, Rng } from "@grimoire/engine";
 import express from "express";
 import { Server } from "socket.io";
@@ -29,7 +29,25 @@ const SFX_FOLDERS = [
   "player-join", "your-turn", "whisper", "timer-warning",
 ];
 const AUDIO_EXTENSIONS = /\.(mp3|ogg|wav|m4a|aac|flac)$/i;
-const userAssets = join(root, "user-assets");
+
+/**
+ * Point GRIMOIRE_ASSETS_DIR at any folder on disk — your real music library,
+ * kept outside the git checkout so it survives re-clones/redeploys and never
+ * needs uploading. The folder still needs this app's own structure inside it
+ * (music/general, music/dusk, music/night, sfx/<event>/…) — bootstrapUserAssets
+ * below creates that structure automatically on first run if it's missing, so
+ * pointing at a brand-new empty folder "just works": drop files into the
+ * subfolders it creates. This only affects a LOCAL server — a cloud host has
+ * no way to reach a folder that lives on your machine.
+ */
+function resolveAssetsDir(): string {
+  const configured = process.env.GRIMOIRE_ASSETS_DIR?.trim();
+  if (!configured) return join(root, "user-assets");
+  const expanded = configured.startsWith("~") ? join(homedir(), configured.slice(1)) : configured;
+  return isAbsolute(expanded) ? expanded : resolve(root, expanded);
+}
+
+const userAssets = resolveAssetsDir();
 
 function bootstrapUserAssets(): void {
   for (const f of MUSIC_FOLDERS) mkdirSync(join(userAssets, "music", f), { recursive: true });
@@ -248,6 +266,7 @@ io.on("connection", (socket) => {
 // whatever Node's unspecified-host default happens to pick on this OS.
 http.listen(PORT, "0.0.0.0", () => {
   console.log(`grimoire server listening on http://localhost:${PORT}`);
+  console.log(`  audio library: ${userAssets}`);
   const candidates = lanCandidates();
   if (candidates.length === 0) {
     console.log("  no LAN address found — phones on Wi-Fi won't be able to reach this server");

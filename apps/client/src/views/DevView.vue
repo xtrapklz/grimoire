@@ -3,6 +3,7 @@
 // person can play-test a full table alone. Attach with /#/dev/CODE.
 import { computed, onMounted, ref } from "vue";
 import { getSocket, onReconnect, sendDevAction, state } from "@/socket";
+import ConnectionBanner from "@/components/ConnectionBanner.vue";
 import Icon from "@/components/Icon.vue";
 import RoleToken from "@/components/RoleToken.vue";
 
@@ -71,6 +72,7 @@ function statusIcons(statuses: Array<{ type: string }>): string[] {
 
 <template>
   <div class="dev">
+    <ConnectionBanner />
     <header class="devbar">
       <h1>Puppeteer — {{ props.code }}</h1>
       <div class="controls">

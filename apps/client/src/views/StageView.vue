@@ -7,6 +7,7 @@ import QRCode from "qrcode";
 import { getSocket, onCues, onReconnect, resetGameState, sendUpdateSettings, state } from "@/socket";
 import { audio } from "@/audio";
 import { phaseInfoOf, skyPhaseOf } from "@/phase";
+import ConnectionBanner from "@/components/ConnectionBanner.vue";
 import Icon from "@/components/Icon.vue";
 import TimerClock from "@/components/TimerClock.vue";
 import type { Cue } from "@grimoire/engine";
@@ -482,6 +483,7 @@ const ready = computed(() => state.readiness);
 
 <template>
   <div class="stage" @pointerdown="enableAudio">
+    <ConnectionBanner />
     <div class="bg-layer" :class="skyPhase" />
     <div class="clouds c1" :class="skyPhase" />
     <div class="clouds c2" :class="skyPhase" />
@@ -963,8 +965,10 @@ const ready = computed(() => state.readiness);
   object-fit: contain;
 }
 .selfie {
-  width: 100%;
-  height: 100%;
+  /* Inset like the role/emoji icons, so the token's own circular border shows
+     around the edge instead of the photo covering it edge-to-edge. */
+  width: 85%;
+  height: 85%;
   object-fit: cover;
   border-radius: 50%;
 }

@@ -35,6 +35,9 @@ const PATHS: Record<string, string> = {
   book: `<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>`,
   list: `<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1" fill="currentColor" stroke="none"/>`,
   external: `<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>`,
+  lock: `<rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>`,
+  retake: `<path d="M3 4v6h6"/><path d="M4.5 15a8 8 0 1 0 1.7-8.7L3 10"/>`,
+  offline: `<line x1="2" y1="2" x2="22" y2="22"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M5 13a9.5 9.5 0 0 1 3.5-2.3"/><path d="M15.5 10.7A9.5 9.5 0 0 1 19 13"/><path d="M2 8.5a13.5 13.5 0 0 1 4.5-2.9"/><path d="M17.5 5.6A13.5 13.5 0 0 1 22 8.5"/><circle cx="12" cy="19.5" r="1" fill="currentColor" stroke="none"/>`,
 };
 
 const inner = computed(() => PATHS[props.name] ?? "");

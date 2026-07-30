@@ -20,6 +20,24 @@ if [ ! -d node_modules ]; then
   npm install --no-audit --no-fund
 fi
 
+# Point Grimoire at your own music/SFX folder — anywhere on disk, kept
+# outside this project — instead of dropping files into user-assets/ here.
+# Asked once; remembered after. Delete .grimoire-assets-path and run again
+# to change it, or leave blank to keep using the bundled user-assets/ folder.
+ASSETS_CONFIG=".grimoire-assets-path"
+if [ ! -f "$ASSETS_CONFIG" ]; then
+  echo ""
+  echo "Where's your music & sound effects folder? (leave blank to use this"
+  echo "project's own user-assets/ folder — you can drop files there anytime)"
+  read -r -p "Path: " assets_path
+  assets_path="${assets_path/#\~/$HOME}"
+  echo "${assets_path:-(none)}" > "$ASSETS_CONFIG"
+fi
+saved_path="$(cat "$ASSETS_CONFIG")"
+if [ "$saved_path" != "(none)" ] && [ -n "$saved_path" ]; then
+  export GRIMOIRE_ASSETS_DIR="$saved_path"
+fi
+
 if [ "$1" != "--skip-build" ]; then
   echo "Building the client…"
   npm run build --workspace=@grimoire/client

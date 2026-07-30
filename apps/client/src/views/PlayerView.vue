@@ -5,6 +5,7 @@ import { getSocket, onReconnect, sendAction, sendReady, sessionKey, state } from
 import { audio } from "@/audio";
 import { phaseInfoOf, skyPhaseOf } from "@/phase";
 import AvatarPicker from "@/components/AvatarPicker.vue";
+import ConnectionBanner from "@/components/ConnectionBanner.vue";
 import GuideSheet from "@/components/GuideSheet.vue";
 import Icon from "@/components/Icon.vue";
 import RoleToken from "@/components/RoleToken.vue";
@@ -142,6 +143,22 @@ const guideOpen = ref(false);
 const recordOpen = ref(false);
 const whispersOpen = ref(false);
 
+// In the physical game, private information is shown once and never again —
+// you remember it or you don't. A permanent scrollback log breaks that, most
+// visibly for the Spy (who'd otherwise get a standing reference to the whole
+// grimoire all day, every day). So the whisper card and its full history are
+// only reachable while it's actually night; once dawn breaks, they're gone
+// until the next night's info arrives. Your own role ("You are the X") is
+// exempt — that's shown separately via the always-visible role card, not
+// through this system, matching how you'd never forget your own character.
+const infoVisible = computed(() => pub.value?.phase === "night");
+watch(
+  () => pub.value?.phase,
+  (phase, old) => {
+    if (old === "night" && phase !== "night") whispersOpen.value = false;
+  },
+);
+
 const skyPhase = computed(() => skyPhaseOf(state.pub));
 const phaseInfo = computed(() => phaseInfoOf(state.pub));
 
@@ -211,6 +228,9 @@ function describeInfo(info: Info): string {
 </script>
 
 <template>
+  <!-- Always present, regardless of which screen below is showing -->
+  <ConnectionBanner />
+
   <!-- Reclaiming a seat after a refresh/reconnect — never flash the join form -->
   <div v-if="!joined && autoRejoining" class="center-page">
     <h1>Rejoining…</h1>
@@ -221,7 +241,6 @@ function describeInfo(info: Info): string {
   <div v-else-if="!joined" class="center-page">
     <h1>Join the tale</h1>
     <div class="panel" style="display: flex; flex-direction: column; gap: 0.7rem; min-width: 17rem">
-      <p v-if="!state.connected" class="connstatus">Connecting to the game…</p>
       <input v-model="codeInput" placeholder="Room code" maxlength="4" style="text-transform: uppercase" />
       <input v-model="nameInput" placeholder="Your name" maxlength="20" @keyup.enter="join" />
       <button class="primary" :disabled="!codeInput || !nameInput || joining" @click="join">
@@ -284,15 +303,22 @@ function describeInfo(info: Info): string {
       {{ pub.seats[me?.seat ?? 0]?.usedDeadVote ? "no votes left" : "one final vote" }}.
     </p>
 
-    <!-- Latest info (tap for the full history and detail views) -->
+    <!-- Latest info: only reachable at night — you remember it by day -->
     <div
-      v-if="latestInfo && latestInfo.type !== 'youAre'"
+      v-if="latestInfo && latestInfo.type !== 'youAre' && infoVisible"
       class="panel info"
       @click="whispersOpen = true"
     >
       <h3>The Storyteller whispers…</h3>
       <p>{{ describeInfo(latestInfo) }}</p>
       <p class="hint">tap to open your whispers</p>
+    </div>
+    <div
+      v-else-if="latestInfo && latestInfo.type !== 'youAre'"
+      class="panel info locked"
+    >
+      <Icon name="lock" :size="16" />
+      <p class="hint">You'll have to remember what you learned last night.</p>
     </div>
 
     <!-- Night action -->
@@ -544,16 +570,21 @@ function describeInfo(info: Info): string {
   text-align: center;
   color: #999;
 }
-.connstatus {
-  text-align: center;
-  font-size: 0.8rem;
-  color: var(--gold);
-  opacity: 0.85;
-}
 .info h3,
 .action h3 {
   margin-bottom: 0.5rem;
   text-align: center;
+}
+.info.locked {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  opacity: 0.65;
+  cursor: default;
+}
+.info.locked .hint {
+  opacity: 1;
 }
 .seatgrid {
   display: grid;
