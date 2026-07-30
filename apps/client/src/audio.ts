@@ -4,6 +4,15 @@
 // plain HTMLAudio elements with volume ramps.
 
 import type { AudioManifest } from "@grimoire/shared";
+import {
+  clearSavedFolder,
+  filesToObjectUrls,
+  isSupported,
+  loadSavedFolder,
+  readFolderContents,
+  requestPermission,
+  saveFolderHandle,
+} from "./local-folder";
 
 const CROSSFADE_MS = 2000;
 const DUCK_LEVEL = 0.3;
@@ -46,6 +55,102 @@ class AudioDirector {
     }
   }
 
+  // ── Local folder (browser reads straight from disk, nothing uploaded) ──────
+  // When active, a group/event present in the local folder takes priority over
+  // the server-hosted manifest — lets someone use their own library without
+  // ever sending it anywhere, while still falling back to server-hosted audio
+  // for anything the local folder doesn't have.
+
+  localFolderName: string | null = null;
+  /** A remembered folder exists but the browser needs a fresh click to re-grant read access. */
+  localFolderNeedsReconnect = false;
+  private localMusicUrls: Record<string, string[]> = {};
+  private localSfxUrls: Record<string, string[]> = {};
+  private localObjectUrls: string[] = [];
+  private pendingHandle: FileSystemDirectoryHandle | null = null;
+
+  get localFolderSupported(): boolean {
+    return isSupported();
+  }
+
+  get localFolderActive(): boolean {
+    return this.localFolderName !== null && !this.localFolderNeedsReconnect;
+  }
+
+  /** Opens the OS folder picker — must be called from a click handler. */
+  async pickLocalFolder(): Promise<boolean> {
+    if (!isSupported()) return false;
+    try {
+      const handle = await window.showDirectoryPicker({ id: "grimoire-audio", mode: "read" });
+      await this.useLocalHandle(handle);
+      await saveFolderHandle(handle);
+      return true;
+    } catch {
+      return false; // user cancelled the picker
+    }
+  }
+
+  /** Call on startup: silently resumes a previously-picked folder if still permitted. */
+  async tryRestoreLocalFolder(): Promise<void> {
+    if (!isSupported()) return;
+    const saved = await loadSavedFolder();
+    if (!saved) return;
+    if (saved.granted) {
+      await this.useLocalHandle(saved.handle);
+    } else {
+      // Browsers won't silently re-grant filesystem access after a reload —
+      // surface it so the UI can offer a one-click "Reconnect" instead of
+      // just quietly losing the folder every time the page loads.
+      this.pendingHandle = saved.handle;
+      this.localFolderName = saved.handle.name;
+      this.localFolderNeedsReconnect = true;
+    }
+  }
+
+  /** Re-grants access to the remembered folder — must be called from a click handler. */
+  async reconnectLocalFolder(): Promise<boolean> {
+    if (!this.pendingHandle) return false;
+    const ok = await requestPermission(this.pendingHandle);
+    if (!ok) return false;
+    await this.useLocalHandle(this.pendingHandle);
+    return true;
+  }
+
+  async disconnectLocalFolder(): Promise<void> {
+    this.revokeLocalUrls();
+    this.localMusicUrls = {};
+    this.localSfxUrls = {};
+    this.localFolderName = null;
+    this.localFolderNeedsReconnect = false;
+    this.pendingHandle = null;
+    await clearSavedFolder();
+  }
+
+  private async useLocalHandle(handle: FileSystemDirectoryHandle): Promise<void> {
+    this.revokeLocalUrls();
+    const contents = await readFolderContents(handle);
+    const music = filesToObjectUrls(contents.music);
+    const sfx = filesToObjectUrls(contents.sfx);
+    this.localMusicUrls = music.urls;
+    this.localSfxUrls = sfx.urls;
+    this.localObjectUrls = [...music.allUrls, ...sfx.allUrls];
+    this.localFolderName = handle.name;
+    this.localFolderNeedsReconnect = false;
+    this.pendingHandle = null;
+    // A folder picked mid-game should take effect immediately, not just on
+    // the next natural phase change.
+    if (this.currentGroup) {
+      const g = this.currentGroup;
+      this.currentGroup = null;
+      this.playMusic(g);
+    }
+  }
+
+  private revokeLocalUrls(): void {
+    for (const u of this.localObjectUrls) URL.revokeObjectURL(u);
+    this.localObjectUrls = [];
+  }
+
   /** Must be called from a user gesture (browser autoplay policy). */
   enable(): void {
     if (this.enabled) return;
@@ -81,7 +186,8 @@ class AudioDirector {
 
     const doSwitch = () => {
       this.switchTimer = null;
-      const tracks = this.manifest.music[group] ?? [];
+      const local = this.localFolderActive ? this.localMusicUrls[group] : undefined;
+      const tracks = local && local.length > 0 ? local : (this.manifest.music[group] ?? []);
       this.fadeOutCurrent();
       if (tracks.length === 0) return;
       this.queue = tracks.slice();
@@ -146,7 +252,9 @@ class AudioDirector {
    */
   sfx(name: string | undefined): void {
     if (!name || !this.enabled || this.muted) return;
-    const urls = this.manifest.sfx[name.toLowerCase()] ?? [];
+    const key = name.toLowerCase();
+    const local = this.localFolderActive ? this.localSfxUrls[key] : undefined;
+    const urls = local && local.length > 0 ? local : (this.manifest.sfx[key] ?? []);
     if (urls.length === 0) return;
     const el = new Audio(urls[Math.floor(Math.random() * urls.length)]!);
     el.volume = this.sfxVolume;

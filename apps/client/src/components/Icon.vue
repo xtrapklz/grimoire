@@ -41,6 +41,7 @@ const PATHS: Record<string, string> = {
   stop: `<rect x="5" y="5" width="14" height="14" rx="2"/>`,
   upload: `<path d="M12 16V4"/><polyline points="6.5 9.5 12 4 17.5 9.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>`,
   trash: `<polyline points="4 6.5 20 6.5"/><path d="M9 6.5V4.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6.5 6.5 7.3 19a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12.5"/><line x1="10" y1="10.5" x2="10" y2="16.5"/><line x1="14" y1="10.5" x2="14" y2="16.5"/>`,
+  folder: `<path d="M3 6.5a1.5 1.5 0 0 1 1.5-1.5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/>`,
 };
 
 const inner = computed(() => PATHS[props.name] ?? "");

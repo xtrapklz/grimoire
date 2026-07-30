@@ -109,6 +109,42 @@ function applySfxVolume() {
   audio.setSfxVolume(sfxVolume.value);
 }
 
+// ── Local audio folder ──────────────────────────────────────────────────────
+// Reads music/SFX straight from a folder on THIS computer's disk — nothing is
+// uploaded or sent to the server at all. Only works in this browser tab, on
+// this machine (Chrome/Edge only — the File System Access API isn't in
+// Firefox or Safari), which is fine since the stage is the one place that
+// plays music anyway.
+
+const localFolderBusy = ref(false);
+const localFolderError = ref("");
+
+async function pickLocalFolder() {
+  localFolderError.value = "";
+  localFolderBusy.value = true;
+  try {
+    const ok = await audio.pickLocalFolder();
+    if (!ok) localFolderError.value = "No folder was selected.";
+  } finally {
+    localFolderBusy.value = false;
+  }
+}
+
+async function reconnectLocalFolder() {
+  localFolderError.value = "";
+  localFolderBusy.value = true;
+  try {
+    const ok = await audio.reconnectLocalFolder();
+    if (!ok) localFolderError.value = "Couldn't reconnect — try choosing the folder again.";
+  } finally {
+    localFolderBusy.value = false;
+  }
+}
+
+async function disconnectLocalFolder() {
+  await audio.disconnectLocalFolder();
+}
+
 // ── Pacing settings (live-adjustable) ───────────────────────────────────────
 // A local editable copy of the room's settings; every change is pushed to the
 // server, which clamps it and — if a timed phase is running — re-times the
@@ -386,6 +422,7 @@ onMounted(() => {
   onReconnect(attach);
   onCues(handleCues);
   audio.load();
+  void audio.tryRestoreLocalFolder();
   loadHostInfo();
   refreshVoices();
   // Voice lists often fill in asynchronously.
@@ -534,6 +571,35 @@ const ready = computed(() => state.readiness);
             @input="applySfxVolume"
           />
         </label>
+
+        <h3>Local audio folder</h3>
+        <template v-if="!audio.localFolderSupported">
+          <p class="hint">
+            Not available in this browser — reading a folder straight off disk
+            needs Chrome or Edge. Sound effects/music can still be added
+            through the Admin panel's Audio library instead.
+          </p>
+        </template>
+        <template v-else>
+          <p class="hint">
+            Point this straight at a folder on this computer — nothing is
+            uploaded, the files never leave this machine. Only affects this
+            browser tab (the one playing music), not players' phones.
+          </p>
+          <div v-if="audio.localFolderNeedsReconnect" class="localfolder-row">
+            <span><Icon name="folder" :size="15" /> {{ audio.localFolderName }} (needs reconnecting)</span>
+            <button :disabled="localFolderBusy" @click="reconnectLocalFolder">Reconnect</button>
+          </div>
+          <div v-else-if="audio.localFolderActive" class="localfolder-row">
+            <span><Icon name="folder" :size="15" /> Using {{ audio.localFolderName }}</span>
+            <button :disabled="localFolderBusy" @click="disconnectLocalFolder">Disconnect</button>
+          </div>
+          <button v-else :disabled="localFolderBusy" @click="pickLocalFolder">
+            <Icon name="folder" :size="15" />
+            {{ localFolderBusy ? "Reading folder…" : "Choose a folder" }}
+          </button>
+          <p v-if="localFolderError" class="lanwarning">{{ localFolderError }}</p>
+        </template>
 
         <h3>Storyteller voice</h3>
         <select v-model="selectedVoice" @change="applyVoice">
@@ -861,6 +927,26 @@ const ready = computed(() => state.readiness);
 }
 .ratelabel input {
   flex: 1;
+}
+.localfolder-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+}
+.localfolder-row span {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.voicepanel .hint {
+  font-size: 0.78rem;
+  opacity: 0.7;
+  margin: 0;
 }
 .topright {
   display: flex;
