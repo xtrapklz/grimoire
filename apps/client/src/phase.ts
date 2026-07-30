@@ -10,7 +10,7 @@ export function skyPhaseOf(pub: PublicState | null): SkyPhase {
   const p = pub?.phase;
   if (!p || pub?.winner) return "";
   if (p === "night" || p === "dusk") return "night";
-  if (p === "nominations" || p === "vote" || p === "execution") return "dusk";
+  if (p === "nominations" || p === "argument" || p === "vote" || p === "execution") return "dusk";
   if (p === "dawn") return "dawn";
   return "day";
 }
@@ -20,7 +20,12 @@ export function phaseInfoOf(pub: PublicState | null): { icon: string; text: stri
   if (!pub) return { icon: "clock", text: "Waiting in the lobby" };
   if (pub.winner) return { icon: "flag", text: "Game over" };
   if (pub.phase === "night" || pub.phase === "dusk") return { icon: "moon", text: `Night ${pub.night}` };
-  if (pub.phase === "nominations" || pub.phase === "vote" || pub.phase === "execution") {
+  if (
+    pub.phase === "nominations" ||
+    pub.phase === "argument" ||
+    pub.phase === "vote" ||
+    pub.phase === "execution"
+  ) {
     return { icon: "sunset", text: `Dusk ${pub.day}` };
   }
   if (pub.phase === "dawn") return { icon: "sunrise", text: `Dawn ${pub.day}` };

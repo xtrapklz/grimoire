@@ -122,6 +122,7 @@ function expectNightPrompt(g: Game, seat: number, characterId?: CharId): void {
 function executeSeat(g: Game, nominator: number, nominee: number): void {
   if (g.pending?.kind === "day") g.advancePhase();
   g.submit(nominator, { type: "nominate", nominee });
+  while (g.pending?.kind === "argument") g.advancePhase();
   const pend = g.pending;
   if (pend?.kind !== "vote") throw new Error("expected a vote to be pending");
   for (const s of [...pend.awaiting]) g.submit(s, { type: "vote", vote: true });

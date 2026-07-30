@@ -106,6 +106,7 @@ describe("audit W-3: dead players are legal night targets", () => {
     // Day 1: execute the chef (seat 2).
     g.advancePhase();
     g.submit(0, { type: "nominate", nominee: 2 });
+    while (g.pending?.kind === "argument") g.advancePhase();
     for (let s = 0; s < 7; s++) g.submit(s, { type: "vote", vote: true });
     g.advancePhase();
     expect(g.player(2).alive).toBe(false);
@@ -123,6 +124,7 @@ describe("audit F-1/F-3: slayer interactions with the vote", () => {
     g.submit(6, { type: "nightChoice", seats: [1] }); // poison the empath
     g.advancePhase(); // → nominations
     g.submit(1, { type: "nominate", nominee: 5 }); // nominate the recluse
+    while (g.pending?.kind === "argument") g.advancePhase();
     expect(g.phase).toBe("vote");
     g.submit(0, { type: "slayerShot", target: 5 }); // registers as demon → dies
     expect(g.player(5).alive).toBe(false);

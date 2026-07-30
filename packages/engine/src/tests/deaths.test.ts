@@ -86,6 +86,7 @@ function voteAll(g: Game, yes: boolean): void {
 function executeSeat(g: Game, nominator: number, nominee: number): void {
   if (g.pending?.kind === "day") g.advancePhase();
   g.submit(nominator, { type: "nominate", nominee });
+  while (g.pending?.kind === "argument") g.advancePhase();
   voteAll(g, true);
   g.advancePhase(); // close nominations → execution → dusk → next night (or game over)
 }
@@ -643,6 +644,7 @@ describe("saint", () => {
     g.submit(4, { type: "nightChoice", seats: [0] }); // n1: poison washerwoman
     g.advancePhase(); // → nominations
     g.submit(3, { type: "nominate", nominee: 2 }); // SAINT nominates the virgin
+    while (g.pending?.kind === "argument") g.advancePhase();
 
     expect(eventsOf(g, "virginTriggered")).toHaveLength(0);
     expect(eventsOf(g, "death")).toHaveLength(0);

@@ -55,6 +55,7 @@ export type Phase =
   | "dawn"       // death announcements
   | "day"        // open discussion
   | "nominations"
+  | "argument"   // case (30s) then defense (30s) before voting opens
   | "vote"       // a specific nomination being voted on
   | "execution"  // showing the result
   | "dusk"       // day wrap-up before night falls
@@ -113,6 +114,7 @@ export type PlayerAction =
   | { type: "nightChoice"; seats: number[] }
   | { type: "nominate"; nominee: number }
   | { type: "passNomination" } // player declines to nominate right now
+  | { type: "skipArgument" } // current speaker ends their case/defense window early
   | { type: "vote"; vote: boolean }
   | { type: "slayerShot"; target: number };
 
@@ -121,6 +123,7 @@ export type Pending =
   | { kind: "nightAction"; seat: number; prompt: NightPrompt }
   | { kind: "day" }         // discussion; slayer shots allowed; server advances to nominations
   | { kind: "nominations" } // awaiting nominate/pass from alive players; server may close
+  | { kind: "argument"; nominator: number; nominee: number; stage: "case" | "defense" }
   | { kind: "vote"; nominator: number; nominee: number; awaiting: number[] }
   | null;
 
@@ -137,6 +140,7 @@ export type GameEvent =
   | { t: "death"; seat: number; cause: DeathCause }
   | { t: "nightDeathPrevented"; seat: number; reason: "soldier" | "monk" | "malfunction" | "mayorBounce" }
   | { t: "nomination"; nominator: number; nominee: number }
+  | { t: "argumentStage"; nominator: number; nominee: number; stage: "case" | "defense" }
   | { t: "virginTriggered"; virgin: number; nominator: number }
   | { t: "slayerShot"; slayer: number; target: number; died: boolean }
   | { t: "voteResult"; nominee: number; votes: number[]; required: number; outcome: "aboutToDie" | "tied" | "failed" }
@@ -158,6 +162,7 @@ export type Cue =
   | { cue: "announce"; key: string; data?: Record<string, unknown> }
   | { cue: "deaths"; seats: number[] }          // dawn reveal (may be empty = peaceful night)
   | { cue: "nomination"; nominator: number; nominee: number }
+  | { cue: "argumentStage"; nominator: number; nominee: number; stage: "case" | "defense" }
   | { cue: "voteReveal"; nominee: number; votes: number[]; required: number; outcome: string }
   | { cue: "execution"; seat: number | null }
   | { cue: "slayerShot"; slayer: number; target: number; died: boolean }

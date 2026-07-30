@@ -115,6 +115,10 @@ async function nominate() {
   nominateTarget.value = null;
 }
 
+async function skipArgument() {
+  await sendAction({ type: "skipArgument" });
+}
+
 const latestInfo = computed<Info | null>(() => {
   const inbox = me.value?.inbox ?? [];
   return inbox.length ? inbox[inbox.length - 1]! : null;
@@ -188,7 +192,11 @@ const iAmReady = computed(() => {
   return seat !== undefined && (state.readiness?.ready.includes(seat) ?? false);
 });
 const showReadyButton = computed(
-  () => pub.value?.phase === "day" && alive.value && !prompt.value && state.readiness !== null,
+  () =>
+    (pub.value?.phase === "day" || pub.value?.phase === "nominations") &&
+    alive.value &&
+    !prompt.value &&
+    state.readiness !== null,
 );
 
 function seatName(seat: number): string {
@@ -348,6 +356,20 @@ function describeInfo(info: Info): string {
       </div>
     </div>
 
+    <!-- Argument: the current speaker (nominator's case, then nominee's defense) -->
+    <div v-else-if="prompt?.kind === 'argument'" class="panel action">
+      <h3>{{ prompt.stage === "case" ? "Make your case" : "Defend yourself" }}</h3>
+      <p class="hint">
+        {{ prompt.stage === "case"
+          ? `Why should ${seatName(prompt.nominee)} be executed?`
+          : `${seatName(prompt.nominator)} has accused you — speak now`
+        }}
+      </p>
+      <button class="primary" @click="skipArgument">
+        <Icon name="check" :size="18" /> Done — cast the vote
+      </button>
+    </div>
+
     <!-- Nominations -->
     <div v-else-if="me?.canNominate" class="panel action">
       <h3>Nominations are open</h3>
@@ -385,7 +407,13 @@ function describeInfo(info: Info): string {
     <div v-if="showReadyButton" class="panel action">
       <button class="primary readybtn" :disabled="iAmReady" @click="sendReady()">
         <Icon name="check" :size="18" />
-        {{ iAmReady ? "Waiting for the others" : "Ready for dusk" }}
+        {{
+          iAmReady
+            ? "Waiting for the others"
+            : pub.phase === "nominations"
+              ? "No more nominations"
+              : "Ready for dusk"
+        }}
       </button>
       <p v-if="state.readiness" class="hint">
         {{ state.readiness.ready.length }} of {{ state.readiness.required.length }} ready
@@ -400,6 +428,13 @@ function describeInfo(info: Info): string {
       <p v-else-if="pub.winner">
         <Icon name="flag" :size="16" />
         {{ pub.winner.team === "good" ? "GOOD WINS" : "EVIL WINS" }}
+      </p>
+      <p v-else-if="pub.phase === 'argument' && pub.argument">
+        <Icon name="mic" :size="16" />
+        {{ pub.argument.stage === "case"
+          ? `${seatName(pub.argument.nominator)} makes their case against ${seatName(pub.argument.nominee)}`
+          : `${seatName(pub.argument.nominee)} defends themselves`
+        }}
       </p>
       <p v-else>
         <Icon name="sun" :size="16" /> Day {{ pub.day }} — talk amongst yourselves

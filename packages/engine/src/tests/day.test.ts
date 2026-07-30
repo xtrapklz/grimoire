@@ -109,6 +109,9 @@ function votePending(g: Game): Extract<NonNullable<Game["pending"]>, { kind: "vo
 
 function nominate(g: Game, nominator: number, nominee: number): void {
   g.submit(nominator, { type: "nominate", nominee });
+  // Skip the case/defense argument window — most tests here assume voting
+  // opens immediately, matching pre-argument-phase behavior.
+  while (g.pending?.kind === "argument") g.advancePhase();
 }
 
 /** Every awaiting seat votes; `yes` lists the seats voting yes. */
@@ -116,6 +119,60 @@ function runVote(g: Game, yes: number[]): void {
   const awaiting = [...votePending(g).awaiting];
   for (const s of awaiting) g.submit(s, { type: "vote", vote: yes.includes(s) });
 }
+
+// ── 0. Argument phase (case → defense → vote) ───────────────────────────────
+
+describe("argument phase", () => {
+  it("a nomination opens a case window, not the vote", () => {
+    const g = make(BAG_PLAIN);
+    g.advancePhase(); // day → nominations
+    g.submit(0, { type: "nominate", nominee: 3 });
+    expect(g.pending).toEqual({ kind: "argument", nominator: 0, nominee: 3, stage: "case" });
+    expect(g.phase).toBe("argument");
+  });
+
+  it("advancePhase() (the timeout path) moves case → defense, then defense → vote", () => {
+    const g = make(BAG_PLAIN);
+    g.advancePhase();
+    g.submit(0, { type: "nominate", nominee: 3 });
+    g.advancePhase(); // case → defense
+    expect(g.pending).toEqual({ kind: "argument", nominator: 0, nominee: 3, stage: "defense" });
+    g.advancePhase(); // defense → vote
+    const pend = votePending(g);
+    expect(pend.nominator).toBe(0);
+    expect(pend.nominee).toBe(3);
+  });
+
+  it("the nominator can skip their case window early", () => {
+    const g = make(BAG_PLAIN);
+    g.advancePhase();
+    g.submit(0, { type: "nominate", nominee: 3 });
+    g.submit(0, { type: "skipArgument" });
+    expect(g.pending).toEqual({ kind: "argument", nominator: 0, nominee: 3, stage: "defense" });
+  });
+
+  it("the nominee can skip their defense window early", () => {
+    const g = make(BAG_PLAIN);
+    g.advancePhase();
+    g.submit(0, { type: "nominate", nominee: 3 });
+    g.advancePhase(); // case → defense
+    g.submit(3, { type: "skipArgument" });
+    expect(votePending(g).nominee).toBe(3);
+  });
+
+  it("only the current speaker may skip — anyone else throws", () => {
+    const g = make(BAG_PLAIN);
+    g.advancePhase();
+    g.submit(0, { type: "nominate", nominee: 3 });
+    expect(() => g.submit(1, { type: "skipArgument" })).toThrow();
+    expect(() => g.submit(3, { type: "skipArgument" })).toThrow(); // defends later, not now
+  });
+
+  it("skipArgument with no argument pending throws", () => {
+    const g = make(BAG_PLAIN);
+    expect(() => g.submit(0, { type: "skipArgument" })).toThrow();
+  });
+});
 
 // ── 1. Vote math ────────────────────────────────────────────────────────────
 

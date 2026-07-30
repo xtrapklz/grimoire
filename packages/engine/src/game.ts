@@ -286,6 +286,8 @@ export class Game {
       this.cue({ cue: "phase", phase: "nominations", day: this.day });
     } else if (this.pending?.kind === "nominations") {
       this.resolveExecution();
+    } else if (this.pending?.kind === "argument") {
+      this.advanceArgument();
     }
     this.advance();
     return this.drainCues();
@@ -302,6 +304,9 @@ export class Game {
         break;
       case "passNomination":
         this.handlePass(seat);
+        break;
+      case "skipArgument":
+        this.handleSkipArgument(seat);
         break;
       case "vote":
         this.handleVote(seat, action.vote);
@@ -370,14 +375,39 @@ export class Game {
       }
     }
 
+    this.pending = { kind: "argument", nominator, nominee, stage: "case" };
+    this.phase = "argument";
+    this.event({ t: "argumentStage", nominator, nominee, stage: "case" });
+    this.cue({ cue: "argumentStage", nominator, nominee, stage: "case" });
+  }
+
+  /** Case (30s) → defense (30s) → vote opens. Driven by advancePhase() timeouts
+   *  or by the current speaker skipping early via handleSkipArgument(). */
+  private advanceArgument(): void {
+    const pend = this.pending;
+    if (pend?.kind !== "argument") return;
+    if (pend.stage === "case") {
+      this.pending = { ...pend, stage: "defense" };
+      this.event({ t: "argumentStage", nominator: pend.nominator, nominee: pend.nominee, stage: "defense" });
+      this.cue({ cue: "argumentStage", nominator: pend.nominator, nominee: pend.nominee, stage: "defense" });
+      return;
+    }
     this.pending = {
       kind: "vote",
-      nominator,
-      nominee,
+      nominator: pend.nominator,
+      nominee: pend.nominee,
       awaiting: this.eligibleVoters(),
     };
     this.phase = "vote";
     this.voteBallots.clear();
+  }
+
+  private handleSkipArgument(seat: number): void {
+    const pend = this.pending;
+    if (pend?.kind !== "argument") throw new Error("No argument in progress");
+    const speaker = pend.stage === "case" ? pend.nominator : pend.nominee;
+    if (seat !== speaker) throw new Error("Not your turn to speak");
+    this.advanceArgument();
   }
 
   private handlePass(seat: number): void {

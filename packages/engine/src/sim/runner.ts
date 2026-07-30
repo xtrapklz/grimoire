@@ -74,6 +74,14 @@ export function runGame(seed: string, playerCount: number): SimResult {
         break;
       }
 
+      case "argument": {
+        const speaker = pending.stage === "case" ? pending.nominator : pending.nominee;
+        const action = bots[speaker]!.decide(game, speaker);
+        if (action) game.submit(speaker, action);
+        else game.advancePhase(); // simulates the stage's timeout elapsing
+        break;
+      }
+
       case "nominations": {
         if (nomDay !== game.day) {
           nomDay = game.day;

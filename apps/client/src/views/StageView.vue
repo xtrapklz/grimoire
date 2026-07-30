@@ -167,6 +167,8 @@ const PACING_FIELDS: Array<{
   { key: "duskBaseSeconds", label: "Dusk — base length", hint: "before the per-player bonus", min: 0, max: 1800, step: 10 },
   { key: "duskPerLivingSeconds", label: "Dusk — extra per living player", hint: "seconds added per player", min: 0, max: 60, step: 1 },
   { key: "duskGraceSeconds", label: "Dusk grace window", hint: "extra time after a late vote resolves", min: 5, max: 120, step: 5 },
+  { key: "argumentCaseSeconds", label: "Argument — case", hint: "time for the nominator to make their case", min: 5, max: 120, step: 5 },
+  { key: "argumentDefenseSeconds", label: "Argument — defense", hint: "time for the nominee to defend themselves", min: 5, max: 120, step: 5 },
   { key: "voteSeconds", label: "Vote window", hint: "time to raise a hand once called", min: 5, max: 120, step: 5 },
   { key: "nightActionTimeoutSeconds", label: "Night action timeout", hint: "before the storyteller decides for them", min: 0, max: 600, step: 5 },
 ];
@@ -272,7 +274,14 @@ function handleCues(cues: Cue[]) {
         }
         break;
       case "nomination":
-        enqueue({ title: `${seatName(c.nominator)} nominates ${seatName(c.nominee)}`, sub: "Cast your votes", sfx: "nomination", dur: 3200 });
+        enqueue({ title: `${seatName(c.nominator)} nominates ${seatName(c.nominee)}`, sub: "The town listens", sfx: "nomination", dur: 3200 });
+        break;
+      case "argumentStage":
+        enqueue(
+          c.stage === "case"
+            ? { title: `${seatName(c.nominator)} makes their case`, sub: `against ${seatName(c.nominee)}`, sfx: "argument-case", dur: 3200 }
+            : { title: `${seatName(c.nominee)} defends themselves`, sub: "Then the town votes", sfx: "argument-defense", dur: 3200 },
+        );
         break;
       case "voteReveal": {
         const n = c.votes.length;
@@ -504,6 +513,7 @@ function seatStyle(i: number) {
 }
 
 const vote = computed(() => state.pub?.vote ?? null);
+const argument = computed(() => state.pub?.argument ?? null);
 const block = computed(() => state.pub?.onTheBlock ?? null);
 
 function start() {
@@ -666,8 +676,8 @@ const ready = computed(() => state.readiness);
         class="token"
         :class="{
           dead: !s.alive,
-          nominee: vote?.nominee === s.seat,
-          nominator: vote?.nominator === s.seat,
+          nominee: vote?.nominee === s.seat || argument?.nominee === s.seat,
+          nominator: vote?.nominator === s.seat || argument?.nominator === s.seat,
           block: block?.seat === s.seat,
         }"
         :style="seatStyle(s.seat)"
@@ -730,7 +740,14 @@ const ready = computed(() => state.readiness);
           <button class="primary" @click="start">Begin the tale</button>
         </template>
         <template v-else>
-          <p v-if="vote" class="votebox">
+          <p v-if="argument" class="votebox">
+            <Icon name="mic" :size="18" />
+            {{ argument.stage === "case"
+              ? `${seatName(argument.nominator)} makes their case against ${seatName(argument.nominee)}`
+              : `${seatName(argument.nominee)} defends themselves`
+            }}
+          </p>
+          <p v-else-if="vote" class="votebox">
             <Icon name="scales" :size="18" /> {{ seatName(vote.nominee) }} stands accused —
             {{ vote.awaiting.length }} hand{{ vote.awaiting.length === 1 ? "" : "s" }} yet to show
           </p>
@@ -742,7 +759,8 @@ const ready = computed(() => state.readiness);
           </p>
           <p v-if="ready && ready.required.length > 0" class="readycount">
             <Icon name="check" :size="15" />
-            {{ ready.ready.length }} of {{ ready.required.length }} ready for dusk
+            {{ ready.ready.length }} of {{ ready.required.length }}
+            {{ state.pub?.phase === "nominations" ? "ready for night" : "ready for dusk" }}
           </p>
         </template>
       </div>

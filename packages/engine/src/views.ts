@@ -27,6 +27,8 @@ export interface PublicState {
   winner: { team: Alignment; reason: WinReason } | null;
   /** Current vote in progress, if any (votes are public as they resolve). */
   vote: { nominator: number; nominee: number; awaiting: number[] } | null;
+  /** Case/defense window before a vote opens (public — everyone watches it). */
+  argument: { nominator: number; nominee: number; stage: "case" | "defense" } | null;
   /** Who stands to be executed at day's end (public knowledge). */
   onTheBlock: { seat: number; votes: number } | null;
 }
@@ -40,6 +42,7 @@ export interface SeatView {
   /** Set when the engine is waiting on THIS seat. */
   prompt:
     | { kind: "nightAction"; characterId: CharId; choose: { count: number; allowSelf: boolean; allowDead: boolean } }
+    | { kind: "argument"; nominee: number; nominator: number; stage: "case" | "defense" }
     | { kind: "vote"; nominee: number; nominator: number }
     | null;
   canNominate: boolean;
@@ -68,6 +71,10 @@ export function publicState(g: Game): PublicState {
       g.pending?.kind === "vote"
         ? { nominator: g.pending.nominator, nominee: g.pending.nominee, awaiting: g.pending.awaiting }
         : null,
+    argument:
+      g.pending?.kind === "argument"
+        ? { nominator: g.pending.nominator, nominee: g.pending.nominee, stage: g.pending.stage }
+        : null,
     onTheBlock: g.onTheBlock,
   };
 }
@@ -84,6 +91,11 @@ export function seatView(g: Game, seat: number): SeatView {
     };
   } else if (pend?.kind === "vote" && pend.awaiting.includes(seat)) {
     prompt = { kind: "vote", nominee: pend.nominee, nominator: pend.nominator };
+  } else if (pend?.kind === "argument") {
+    const speaker = pend.stage === "case" ? pend.nominator : pend.nominee;
+    if (seat === speaker) {
+      prompt = { kind: "argument", nominee: pend.nominee, nominator: pend.nominator, stage: pend.stage };
+    }
   }
   return {
     seat,

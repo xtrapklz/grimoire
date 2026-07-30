@@ -71,6 +71,7 @@ describe("Game smoke test", () => {
     // Day 1: nominate and execute the Soldier (seat 4).
     g.advancePhase(); // → nominations
     g.submit(0, { type: "nominate", nominee: 4 });
+    while (g.pending?.kind === "argument") g.advancePhase();
     expect(g.phase).toBe("vote");
     for (let s = 0; s < 7; s++) g.submit(s, { type: "vote", vote: s < 4 });
     // 4 yes votes, 4 required (7 alive) → about to die.
@@ -118,6 +119,7 @@ describe("Game smoke test", () => {
     // Day 2: execute the Imp → good wins (no Scarlet Woman in play).
     g.advancePhase();
     g.submit(0, { type: "nominate", nominee: 6 });
+    while (g.pending?.kind === "argument") g.advancePhase();
     for (let s = 0; s < 7; s++) g.submit(s, { type: "vote", vote: true });
     g.advancePhase();
     expect(g.winner).toEqual({ team: "good", reason: "demonKilled" });

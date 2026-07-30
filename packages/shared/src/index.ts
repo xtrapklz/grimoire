@@ -22,6 +22,10 @@ export interface RoomSettings {
   duskMaxSeconds: number;
   /** After a late vote resolves, the extra window for further nominations. */
   duskGraceSeconds: number;
+  /** Seconds the nominator gets to make their case before voting opens. */
+  argumentCaseSeconds: number;
+  /** Seconds the nominee gets to defend themselves before voting opens. */
+  argumentDefenseSeconds: number;
   /** Seconds to cast a vote before it counts as a hand kept down. */
   voteSeconds: number;
   /** Seconds a human gets for a night action before the storyteller decides (0 = wait forever). */
@@ -43,6 +47,8 @@ export const DEFAULT_ROOM_SETTINGS: RoomSettings = {
   duskMinSeconds: 60,
   duskMaxSeconds: 240,
   duskGraceSeconds: 15,
+  argumentCaseSeconds: 30,
+  argumentDefenseSeconds: 30,
   voteSeconds: 20,
   nightActionTimeoutSeconds: 60,
   botFill: true,
@@ -51,7 +57,7 @@ export const DEFAULT_ROOM_SETTINGS: RoomSettings = {
 
 /** Countdown shown on stage and phones. endsAt is server epoch ms. */
 export interface PhaseTimer {
-  kind: "day" | "dusk" | "vote" | "night";
+  kind: "day" | "dusk" | "argument" | "vote" | "night";
   label: string;
   endsAt: number;
   seconds: number;

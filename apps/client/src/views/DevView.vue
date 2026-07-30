@@ -129,7 +129,15 @@ async function deleteAudio(url: string) {
 const grim = computed(() => state.grimoire);
 const pub = computed(() => state.pub);
 const pending = computed(() => (grim.value?.pending ?? null) as
-  | { kind: string; seat?: number; nominee?: number; nominator?: number; awaiting?: number[]; prompt?: { characterId: string; choose: { count: number } } }
+  | {
+      kind: string;
+      seat?: number;
+      nominee?: number;
+      nominator?: number;
+      stage?: "case" | "defense";
+      awaiting?: number[];
+      prompt?: { characterId: string; choose: { count: number } };
+    }
   | null);
 
 function start() {
@@ -182,6 +190,7 @@ function statusIcons(statuses: Array<{ type: string }>): string[] {
           <span class="phase">{{ grim?.phase }} · N{{ grim?.night }} D{{ grim?.day }}</span>
           <button v-if="pub.phase === 'day'" @click="getSocket().emit('advancePhase')">→ nominations</button>
           <button v-if="pub.phase === 'nominations'" @click="getSocket().emit('advancePhase')">→ close day</button>
+          <button v-if="pub.phase === 'argument'" @click="getSocket().emit('advancePhase')">→ next stage</button>
           <button class="danger" :class="{ arming: resetConfirming }" @click="resetGame">
             <Icon name="stop" :size="14" />
             {{ resetConfirming ? "Click again to confirm" : "Stop / reset game" }}
@@ -205,6 +214,20 @@ function statusIcons(statuses: Array<{ type: string }>): string[] {
       <template v-else-if="pending.kind === 'vote'">
         Vote on {{ grim?.view.players[pending.nominee!]?.name }} — awaiting
         {{ pending.awaiting?.length }} ballots
+      </template>
+      <template v-else-if="pending.kind === 'argument'">
+        {{ pending.stage === "case" ? "Case" : "Defense" }}:
+        {{ grim?.view.players[pending.nominator!]?.name }} vs
+        {{ grim?.view.players[pending.nominee!]?.name }} —
+        <button
+          @click="
+            act(pending.stage === 'case' ? pending.nominator! : pending.nominee!, {
+              type: 'skipArgument',
+            })
+          "
+        >
+          Skip
+        </button>
       </template>
       <template v-else>{{ pending.kind }}</template>
     </div>

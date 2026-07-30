@@ -17,6 +17,7 @@ import type { NightPrompt, PlayerAction } from "../types.js";
  *  - pending vote with this seat awaiting → return a vote
  *  - pending nominations and this seat is alive and hasn't acted today
  *    → return nominate or passNomination
+ *  - pending argument and this seat is the current speaker → maybe skipArgument
  * Return null when the pending input is not addressed to this seat.
  */
 export interface Bot {
@@ -51,6 +52,11 @@ export class RandomBot implements Bot {
           }
         }
         return { type: "passNomination" };
+      }
+      case "argument": {
+        const speaker = pending.stage === "case" ? pending.nominator : pending.nominee;
+        if (speaker !== seat) return null;
+        return this.rng.chance(0.5) ? { type: "skipArgument" } : null;
       }
       case "day":
         return null;

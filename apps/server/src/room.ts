@@ -35,6 +35,9 @@ interface SeatBinding {
 
 const BOT_AVATARS = ["🎃", "🦇", "🕯️", "🌙", "🍺", "🧹", "🔮", "🪦", "🐈‍⬛", "🦉"];
 
+/** Phases where "everyone ready → advance early" applies (day discussion, dusk nominations). */
+const READY_PHASES = new Set<string | undefined>(["day", "nominations"]);
+
 /** Sanity-bound every pacing knob so a stray host input can't wedge the game. */
 function clampSettings(s: RoomSettings): RoomSettings {
   const num = (v: unknown, lo: number, hi: number, fallback: number) =>
@@ -46,6 +49,13 @@ function clampSettings(s: RoomSettings): RoomSettings {
   const duskMax = Math.max(duskMin, num(s.duskMaxSeconds, duskMin, 1800, DEFAULT_ROOM_SETTINGS.duskMaxSeconds));
 
   return {
+    argumentCaseSeconds: num(s.argumentCaseSeconds, 5, 120, DEFAULT_ROOM_SETTINGS.argumentCaseSeconds),
+    argumentDefenseSeconds: num(
+      s.argumentDefenseSeconds,
+      5,
+      120,
+      DEFAULT_ROOM_SETTINGS.argumentDefenseSeconds,
+    ),
     dayBaseSeconds: num(s.dayBaseSeconds, 0, 3600, DEFAULT_ROOM_SETTINGS.dayBaseSeconds),
     dayPerLivingSeconds: num(s.dayPerLivingSeconds, 0, 120, DEFAULT_ROOM_SETTINGS.dayPerLivingSeconds),
     dayMinSeconds: dayMin,
@@ -301,7 +311,7 @@ export class Room {
   markReady(socketId: string): void {
     const seat = this.seatOfSocket(socketId);
     if (seat < 0 || !this.game || this.game.winner) return;
-    if (this.game.pending?.kind !== "day") return;
+    if (!READY_PHASES.has(this.game.pending?.kind)) return;
     if (!this.game.player(seat).alive) return;
     this.readySeats.add(seat);
     this.pushReadiness();
@@ -309,14 +319,14 @@ export class Room {
   }
 
   private markBotReady(seat: number): void {
-    if (this.game?.pending?.kind !== "day" || !this.game.player(seat).alive) return;
+    if (!READY_PHASES.has(this.game?.pending?.kind) || !this.game?.player(seat).alive) return;
     this.readySeats.add(seat);
     this.pushReadiness();
     this.checkAllReady();
   }
 
   private checkAllReady(): void {
-    if (!this.game || this.game.pending?.kind !== "day") return;
+    if (!this.game || !READY_PHASES.has(this.game.pending?.kind)) return;
     const living = this.game.alivePlayers().map((p) => p.seat);
     if (living.every((s) => this.readySeats.has(s))) this.advancePhase();
   }
@@ -479,6 +489,15 @@ export class Room {
         // grants a short visible grace window for further accusations, so the
         // countdown never freezes and the phase can never wait on input.
         const day = g.day;
+
+        // "Ready to move on" readiness resets once per dusk, same as Day.
+        const readyKey = `dusk:${day}`;
+        if (this.readyKey !== readyKey) {
+          this.readyKey = readyKey;
+          this.readySeats.clear();
+          this.pushReadiness();
+        }
+
         const grace = (this.fastForward ? 2 : s.duskGraceSeconds) * 1000;
         let deadline = this.duskDeadlines.get(day);
         if (deadline === undefined) {
@@ -512,6 +531,27 @@ export class Room {
           if (!this.botSeat(seat) || !g.player(seat).alive) continue;
           this.once(`nom:${day}:${seat}`, this.rand(4000, 15_000), () => {
             if (this.game?.pending?.kind === "nominations") this.tryBotAction(seat);
+          });
+        }
+        break;
+      }
+
+      case "argument": {
+        // Case (nominator speaks) then defense (nominee speaks), each timed
+        // and skippable early by the speaker via {type:"skipArgument"}.
+        const stageKey = `${g.day}:${pend.nominee}:${pend.stage}`;
+        const seconds = pend.stage === "case" ? s.argumentCaseSeconds : s.argumentDefenseSeconds;
+        const label = pend.stage === "case" ? "Make the case" : "Defend yourself";
+        const speaker = pend.stage === "case" ? pend.nominator : pend.nominee;
+        this.setTimerOnce(`t:argument:${stageKey}`, { kind: "argument", label, seconds });
+        this.once(`argt:${stageKey}`, seconds * 1000, () => {
+          const p = this.game?.pending;
+          if (p?.kind !== "argument" || `${this.game!.day}:${p.nominee}:${p.stage}` !== stageKey) return;
+          this.advancePhase();
+        });
+        if (this.botSeat(speaker)) {
+          this.once(`argb:${stageKey}`, this.rand(1500, Math.max(3000, seconds * 500)), () => {
+            if (this.game?.pending?.kind === "argument") this.tryBotAction(speaker);
           });
         }
         break;
@@ -617,7 +657,7 @@ export class Room {
 
   private pushReadiness(): void {
     let r: Readiness | null = null;
-    if (this.game && !this.game.winner && this.game.pending?.kind === "day") {
+    if (this.game && !this.game.winner && READY_PHASES.has(this.game.pending?.kind)) {
       r = {
         ready: [...this.readySeats].sort((a, b) => a - b),
         required: this.game.alivePlayers().map((p) => p.seat),
