@@ -1,0 +1,23 @@
+{
+  "name": "grimoire",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fully automated Blood on the Clocktower party game — Jackbox-style stage + phone clients with a procedural storyteller. Unofficial fan project; not affiliated with The Pandemonium Institute.",
+  "license": "GPL-3.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "extract-data": "node tools/extract-data.mjs",
+    "test": "npm run test --workspace=@grimoire/engine",
+    "sim": "npm run sim --workspace=@grimoire/engine",
+    "dev": "npm run dev --workspace=@grimoire/server",
+    "party": "npm run build --workspace=@grimoire/client && npm run start --workspace=@grimoire/server",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

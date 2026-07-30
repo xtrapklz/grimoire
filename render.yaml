@@ -1,0 +1,13 @@
+# Render Blueprint — deploy with "New +" → "Blueprint" and point it at this
+# repo, or connect the repo as a plain Web Service and copy these two
+# commands into the dashboard by hand. See docs/deploying-render.md.
+services:
+  - type: web
+    name: grimoire
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start --workspace=@grimoire/server
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
