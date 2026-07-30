@@ -27,6 +27,12 @@ export const state = reactive({
   lobby: null as { code: string; seats: LobbySeat[]; settings: RoomSettings } | null,
   pub: null as PublicState | null,
   seat: null as SeatView | null,
+  /**
+   * This client's seat number, known from the moment joinRoom acks — unlike
+   * `seat` (SeatView), which only exists once the game has started. Needed so
+   * the lobby's avatar preview can find "me" in `lobby.seats` before kickoff.
+   */
+  mySeat: null as number | null,
   grimoire: null as GrimoireSnapshot | null,
   timer: null as PhaseTimer | null,
   readiness: null as Readiness | null,
@@ -65,7 +71,10 @@ export function getSocket(): Socket {
   socket.on("disconnect", () => (state.connected = false));
   socket.on("lobby", (lobby) => (state.lobby = lobby));
   socket.on("state", (pub) => (state.pub = pub));
-  socket.on("seat", (seat) => (state.seat = seat));
+  socket.on("seat", (seat) => {
+    state.seat = seat;
+    state.mySeat = seat.seat;
+  });
   socket.on("grimoire", (g) => (state.grimoire = g));
   socket.on("timer", (t: PhaseTimer | null) => (state.timer = t));
   socket.on("readiness", (r: Readiness | null) => (state.readiness = r));
@@ -81,6 +90,7 @@ export function getSocket(): Socket {
 export function resetGameState(): void {
   state.pub = null;
   state.seat = null;
+  state.mySeat = null;
   state.grimoire = null;
   state.lobby = null;
 }
@@ -112,8 +122,13 @@ export function sendDevAction(seat: number, action: PlayerAction): Promise<{ ok:
   });
 }
 
-export function setAvatar(avatar: string): void {
-  getSocket().emit("setAvatar", { avatar });
+export function setAvatar(avatar: string): Promise<{ ok: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    getSocket().emit("setAvatar", { avatar }, (resp: { ok: boolean; error?: string }) => {
+      if (!resp.ok && resp.error) state.lastError = resp.error;
+      resolve(resp);
+    });
+  });
 }
 
 export function sendReady(): void {

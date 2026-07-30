@@ -167,15 +167,23 @@ export class Room {
     return { ok: true, seat: this.seats.length - 1 };
   }
 
-  setAvatar(socketId: string, avatar: string): void {
+  setAvatar(socketId: string, avatar: string): { ok: true } | { ok: false; error: string } {
     const seat = this.seatOfSocket(socketId);
-    if (seat < 0) return;
-    const ok =
-      (avatar.length <= 8 && !avatar.startsWith("data:")) ||
-      (/^data:image\/(jpeg|png|webp);base64,/.test(avatar) && avatar.length <= 160_000);
-    if (!ok) return;
+    if (seat < 0) return { ok: false, error: "You're not seated in this room" };
+    if (avatar.length <= 8 && !avatar.startsWith("data:")) {
+      this.seats[seat]!.avatar = avatar;
+      this.pushLobby();
+      return { ok: true };
+    }
+    if (!/^data:image\/(jpeg|png|webp);base64,/.test(avatar)) {
+      return { ok: false, error: "Unsupported image format" };
+    }
+    if (avatar.length > 160_000) {
+      return { ok: false, error: "Photo is too large — try retaking it" };
+    }
     this.seats[seat]!.avatar = avatar;
     this.pushLobby();
+    return { ok: true };
   }
 
   handleDisconnect(socketId: string): void {

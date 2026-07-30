@@ -94,8 +94,14 @@ export interface ClientToServer {
     args: { code: string; name: string; sessionKey: string },
     cb: (resp: { ok: true; seat: number } | { ok: false; error: string }) => void,
   ) => void;
-  /** Phone sets its avatar: an emoji (≤8 chars) or a data:image URL (≤160KB). */
-  setAvatar: (args: { avatar: string }) => void;
+  /**
+   * Phone sets its avatar: an emoji (≤8 chars) or a data:image URL (≤160KB).
+   * Acked so a rejected/lost photo is never silent — the caller can retry.
+   */
+  setAvatar: (
+    args: { avatar: string },
+    cb: (resp: { ok: boolean; error?: string }) => void,
+  ) => void;
   /** Phone signals "I'm ready to move on" for the current phase. */
   ready: () => void;
   /** Stage (or dev) starts the game. */

@@ -25,15 +25,22 @@ const cameraOpen = ref(false);
 // avatar — so you can see exactly what everyone else will see and retake it
 // if you blinked, rather than it silently becoming final the instant you tap.
 const reviewImage = ref<string | null>(null);
+/** Visible feedback for every way this can fail — never silent. */
+const pickerError = ref("");
+const uploading = ref(false);
+const cameraReady = ref(false);
 let stream: MediaStream | null = null;
 
-function pickEmoji(e: string) {
-  setAvatar(e);
-  emit("chosen", e);
+async function pickEmoji(e: string) {
+  pickerError.value = "";
+  const resp = await setAvatar(e);
+  if (resp.ok) emit("chosen", e);
 }
 
 async function openCamera() {
   reviewImage.value = null;
+  pickerError.value = "";
+  cameraReady.value = false;
   if (navigator.mediaDevices?.getUserMedia) {
     try {
       stream = await navigator.mediaDevices.getUserMedia({
@@ -44,6 +51,9 @@ async function openCamera() {
       requestAnimationFrame(() => {
         if (videoEl.value) {
           videoEl.value.srcObject = stream;
+          videoEl.value.onloadedmetadata = () => {
+            cameraReady.value = true;
+          };
           void videoEl.value.play();
         }
       });
@@ -63,28 +73,60 @@ function closeCamera() {
 
 onUnmounted(closeCamera);
 
-/** Center-crop a square from a source and return a token-sized JPEG. */
+// The server rejects anything over 160,000 chars; stay comfortably under that
+// so a slow/flaky upload is never the reason a photo gets rejected.
+const AVATAR_MAX_CHARS = 150_000;
+/** [canvas size, JPEG quality] tried in order until the result fits. A 192px
+ *  selfie is normally a few KB, but low-end devices can behave oddly (odd
+ *  color profiles, huge source photos) — this is the belt-and-suspenders. */
+const CROP_ATTEMPTS: Array<[number, number]> = [
+  [192, 0.78],
+  [160, 0.65],
+  [128, 0.55],
+  [96, 0.5],
+];
+
+function renderCrop(
+  source: HTMLVideoElement | HTMLImageElement,
+  w: number,
+  h: number,
+  mirror: boolean,
+  size: number,
+  quality: number,
+): string {
+  const side = Math.min(w, h);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  if (mirror) {
+    ctx.translate(size, 0);
+    ctx.scale(-1, 1);
+  }
+  ctx.drawImage(source, (w - side) / 2, (h - side) / 2, side, side, 0, 0, size, size);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+/** Center-crop a square from a source, shrinking further if needed to stay under the upload cap. */
 function cropToAvatar(
   source: HTMLVideoElement | HTMLImageElement,
   w: number,
   h: number,
   mirror: boolean,
 ): string {
-  const side = Math.min(w, h);
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 192;
-  const ctx = canvas.getContext("2d")!;
-  if (mirror) {
-    ctx.translate(192, 0);
-    ctx.scale(-1, 1);
+  let result = "";
+  for (const [size, quality] of CROP_ATTEMPTS) {
+    result = renderCrop(source, w, h, mirror, size, quality);
+    if (result.length <= AVATAR_MAX_CHARS) return result;
   }
-  ctx.drawImage(source, (w - side) / 2, (h - side) / 2, side, side, 0, 0, 192, 192);
-  return canvas.toDataURL("image/jpeg", 0.78);
+  return result; // smallest attempt — the server has the final say
 }
 
 function snap() {
   const v = videoEl.value;
-  if (!v || !v.videoWidth) return;
+  if (!v || !v.videoWidth) {
+    pickerError.value = "Camera isn't ready yet — give it a second and try again.";
+    return;
+  }
   // Mirrored, matching the preview — a selfie should look like the mirror did.
   const data = cropToAvatar(v, v.videoWidth, v.videoHeight, true);
   closeCamera();
@@ -94,35 +136,48 @@ function snap() {
 async function onFile(ev: Event) {
   const file = (ev.target as HTMLInputElement).files?.[0];
   if (!file) return;
+  pickerError.value = "";
   const url = URL.createObjectURL(file);
   try {
     const img = new Image();
     await new Promise<void>((resolve, reject) => {
       img.onload = () => resolve();
-      img.onerror = reject;
+      img.onerror = () => reject(new Error("decode failed"));
       img.src = url;
     });
     reviewImage.value = cropToAvatar(img, img.width, img.height, false);
+  } catch {
+    pickerError.value = "Couldn't read that photo — try again or pick an icon instead.";
   } finally {
     URL.revokeObjectURL(url);
     if (fileInput.value) fileInput.value.value = "";
   }
 }
 
-function usePhoto() {
+async function usePhoto() {
   if (!reviewImage.value) return;
-  setAvatar(reviewImage.value);
-  emit("chosen", reviewImage.value);
-  reviewImage.value = null;
+  pickerError.value = "";
+  uploading.value = true;
+  const resp = await setAvatar(reviewImage.value);
+  uploading.value = false;
+  if (resp.ok) {
+    emit("chosen", reviewImage.value);
+    reviewImage.value = null;
+  } else {
+    // Keep the review image up so they can just retry the send, or retake.
+    pickerError.value = resp.error ?? "Couldn't save that photo — try again.";
+  }
 }
 
 function retake() {
   reviewImage.value = null;
+  pickerError.value = "";
   openCamera();
 }
 
 function cancelReview() {
   reviewImage.value = null;
+  pickerError.value = "";
 }
 </script>
 
@@ -143,13 +198,16 @@ function cancelReview() {
     <div class="grid">
       <button v-for="e in EMOJI" :key="e" class="emoji" @click="pickEmoji(e)">{{ e }}</button>
     </div>
+    <p v-if="pickerError && !cameraOpen && !reviewImage" class="pickererror">{{ pickerError }}</p>
 
     <!-- Live camera modal (secure contexts) -->
     <div v-if="cameraOpen" class="camera-modal" @click.self="closeCamera">
       <div class="camera-frame">
         <video ref="videoEl" autoplay playsinline muted class="preview" />
+        <p v-if="!cameraReady" class="hint">Starting camera…</p>
+        <p v-if="pickerError" class="pickererror">{{ pickerError }}</p>
         <div class="camera-controls">
-          <button class="primary snap" @click="snap">
+          <button class="primary snap" :disabled="!cameraReady" @click="snap">
             <Icon name="camera" :size="24" /> Snap
           </button>
           <button @click="closeCamera">Cancel</button>
@@ -161,11 +219,13 @@ function cancelReview() {
     <div v-if="reviewImage" class="camera-modal" @click.self="cancelReview">
       <div class="camera-frame">
         <img :src="reviewImage" class="preview reviewimg" alt="your photo" />
+        <p v-if="pickerError" class="pickererror">{{ pickerError }}</p>
         <div class="camera-controls">
-          <button class="primary snap" @click="usePhoto">
-            <Icon name="check" :size="20" /> Use this photo
+          <button class="primary snap" :disabled="uploading" @click="usePhoto">
+            <Icon name="check" :size="20" />
+            {{ uploading ? "Saving…" : pickerError ? "Try again" : "Use this photo" }}
           </button>
-          <button @click="retake"><Icon name="retake" :size="18" /> Retake</button>
+          <button :disabled="uploading" @click="retake"><Icon name="retake" :size="18" /> Retake</button>
         </div>
       </div>
     </div>
@@ -190,6 +250,17 @@ function cancelReview() {
   text-align: center;
   font-size: 0.78rem;
   opacity: 0.6;
+}
+.pickererror {
+  color: var(--blood);
+  font-size: 0.82rem;
+  text-align: center;
+  max-width: 20rem;
+}
+.hint {
+  font-size: 0.82rem;
+  opacity: 0.7;
+  text-align: center;
 }
 .grid {
   display: grid;

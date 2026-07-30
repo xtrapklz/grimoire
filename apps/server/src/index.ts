@@ -280,8 +280,10 @@ io.on("connection", (socket) => {
     cb(r.join(socket, String(args.name).slice(0, 20).trim() || "Player", args.sessionKey));
   });
 
-  socket.on("setAvatar", (args: { avatar: string }) => {
-    if (room && typeof args?.avatar === "string") room.setAvatar(socket.id, args.avatar);
+  socket.on("setAvatar", (args: { avatar: string }, cb) => {
+    if (!room) return cb?.({ ok: false, error: "No room" });
+    if (typeof args?.avatar !== "string") return cb?.({ ok: false, error: "Bad request" });
+    cb?.(room.setAvatar(socket.id, args.avatar));
   });
 
   socket.on("ready", () => {

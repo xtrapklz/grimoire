@@ -59,11 +59,12 @@ function join() {
   socket.emit(
     "joinRoom",
     { code: codeInput.value.toUpperCase(), name: nameInput.value, sessionKey: sessionKey() },
-    (resp: { ok: boolean; error?: string }) => {
+    (resp: { ok: boolean; error?: string; seat?: number }) => {
       clearTimeout(timeout);
       joining.value = false;
       if (resp.ok) {
         joined.value = true;
+        if (typeof resp.seat === "number") state.mySeat = resp.seat;
         localStorage.setItem("grimoire-name", nameInput.value);
         localStorage.setItem("grimoire-room", codeInput.value.toUpperCase());
       } else {
@@ -139,7 +140,10 @@ watch(
 );
 
 const myAvatar = computed(() => {
-  const seat = me.value?.seat ?? -1;
+  // Before the game starts there's no SeatView yet (me.value), so fall back
+  // to the seat number the joinRoom ack gave us — otherwise the lobby's own
+  // avatar preview can never show what was actually saved.
+  const seat = me.value?.seat ?? state.mySeat ?? -1;
   return state.lobby?.seats[seat]?.avatar ?? null;
 });
 
